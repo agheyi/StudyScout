@@ -1,7 +1,7 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
-//HI JACOB
+console.log("HI JACOB");
 
 // Initialize the Firebase Admin SDK
 admin.initializeApp();
