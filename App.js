@@ -25,15 +25,20 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const functions = getFunctions(app);
 
 
-// Mock data for building occupancy to control button colors and order
+// Mock data for building occupancy and locations
 const BUILDING_DATA = [
- { id: '1', name: 'WALC', occupancy: 0.1, isFunctional: true },
- { id: '2', name: 'Co-Rec', occupancy: 0.2, isFunctional: false },
- { id: '3', name: 'Krach', occupancy: 0.5, isFunctional: false },
- { id: '4', name: 'DSAI', occupancy: 0.65, isFunctional: false },
- { id: '5', name: 'Hicks', occupancy: 0.8, isFunctional: false },
- { id: '6', name: 'WTHR', occupancy: 0.95, isFunctional: false },
+ { id: '1', name: 'WALC', occupancy: 0.1, isFunctional: true, location: { latitude: 40.427627844398195, longitude: -86.91312700795571 } },
+ { id: '2', name: 'Co-Rec', occupancy: 0.2, isFunctional: false, location: { latitude: 40.42837234316712, longitude: -86.92228050170229 } },
+ { id: '3', name: 'Krach', occupancy: 0.5, isFunctional: false, location: { latitude: 40.42770007619064, longitude: -86.92119737471492 } },
+ { id: '4', name: 'DSAI', occupancy: 0.65, isFunctional: false, location: { latitude: 40.429194978141574, longitude: -86.91487983423372 } },
+ { id: '5', name: 'Hicks', occupancy: 0.8, isFunctional: false, location: { latitude: 40.42472895718729, longitude: -86.91255983053797 } },
+ { id: '6', name: 'WTHR', occupancy: 0.95, isFunctional: false, location: { latitude: 40.42661749484793, longitude: -86.91302332565841 } },
 ];
+
+const userLocation = {
+  latitude: 40.42837234316712, 
+  longitude: -86.92228050170229
+};
 
 const WALC_HOURS = [
   'Monday: 7:00 AM - 12:00 AM',
@@ -61,52 +66,72 @@ const WALC_HOURS = [
 const getColorForOccupancy = (occupancy) => {
  const gold = { r: 206, g: 184, b: 136 }; // #CEB888
  const black = { r: 0, g: 0, b: 0 };    // #000000
-
-
  // Linearly interpolate between black and gold based on occupancy
  const r = Math.floor(black.r + (gold.r - black.r) * occupancy);
  const g = Math.floor(black.g + (gold.g - black.g) * occupancy);
  const b = Math.floor(black.b + (gold.b - black.b) * occupancy);
-
-
  return `rgb(${r},${g},${b})`;
 };
 
+// Find distance function
+const findDistance = (loc1, loc2) => {
+  const R = 3958.8;
+  const toRad = (value) => (value * Math.PI) / 180;
+  const lat1 = toRad(loc1.latitude);
+  const lon1 = toRad(loc1.longitude);
+  const lat2 = toRad(loc2.latitude);
+  const lon2 = toRad(loc2.longitude);
+  const deltaLat = lat2 - lat1;
+  const deltaLon = lon2 - lon1;
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(deltaLon / 2) *
+      Math.sin(deltaLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
-// Sort buildings from least busy (black) to most busy (gold)
-const sortedBuildings = [...BUILDING_DATA].sort((a, b) => a.occupancy - b.occupancy);
+// Add distance to the building data and sort them by occupancy
+const buildingsWithDistance = BUILDING_DATA.map(building => ({
+  ...building,
+  distance: findDistance(userLocation, building.location),
+}));
 
+const sortedBuildings = [...buildingsWithDistance].sort((a, b) => a.occupancy - b.occupancy);
 
 export default function App() {
- // Use state to manage which "page" is currently displayed
- const [currentPage, setCurrentPage] = useState('callFunction');
+  const [currentPage, setCurrentPage] = useState('studySpaces');
+  const [showDistances, setShowDistances] = useState(false); // New state variable
 
 
- const callMyFunction = () => {
-   console.log("Button pressed!");
-   const updateUserLocation = httpsCallable(functions, 'updateUserLocation');
-   const userLocation = { latitude: 40.4237, longitude: -86.9212 };
-   updateUserLocation(userLocation)
-     .then((result) => {
-       console.log("SUCCESS: The function returned:", result.data);
-     })
-     .catch((error) => {
-       console.error("ERROR calling function:", error);
-     });
-   // After calling the function, change the page to the study spaces screen
-   setCurrentPage('studySpaces');
- };
+  const callMyFunction = () => {
+    console.log("Button pressed!");
+    const updateUserLocation = httpsCallable(functions, 'updateUserLocation');
+    // Note: This userLocation is hardcoded for now, you would get it from a GPS API
+    const userLocationToSend = { latitude: 40.4237, longitude: -86.9212 };
+    updateUserLocation(userLocationToSend)
+      .then((result) => {
+        console.log("SUCCESS: The function returned:", result.data);
+      })
+      .catch((error) => {
+        console.error("ERROR calling function:", error);
+      });
+      // Set the state to true to show the distances
+      setShowDistances(true);
+  };
 
 
- // This function renders the first screen
+ // This function renders the first screen (now deprecated in favor of the new button)
  const renderCallFunctionPage = () => (
-   <View style={styles.initialContainer}>
-     <Button
-       title="Call Cloud Function"
-       onPress={callMyFunction}
-     />
-   </View>
- );
+  <View style={styles.initialContainer}>
+    <Button
+      title="Call Cloud Function"
+      onPress={() => setCurrentPage('studySpaces')}
+    />
+  </View>
+);
 
 
  // This function renders the second screen with the study spaces
@@ -133,9 +158,25 @@ export default function App() {
              }}
              color={building.occupancy > 0.5 ? '#000' : '#fff'} // Set button text color to white for contrast
            />
+           {/* Conditionally render the distance */}
+           {showDistances && (
+             <Text style={styles.distanceText}>
+               {building.distance.toFixed(1)} mi
+             </Text>
+           )}
          </View>
        ))}
      </View>
+     {/* The new button to call the function */}
+     <TouchableOpacity
+       style={styles.callFunctionButton}
+       onPress={callMyFunction}
+     >
+       <Text style={styles.buttonText}>Call Cloud Function</Text>
+     </TouchableOpacity>
+     <Text style={styles.currentLocationText}>
+       Current Location: {userLocation.latitude}, {userLocation.longitude}
+     </Text>
    </View>
  );
 
@@ -147,7 +188,7 @@ export default function App() {
      <Image
        style={styles.walcImage} 
        source={
-         require('/Users/shrreyasethu/StudyScout-6/IMG_5154.jpeg')
+         require('/Users/anwikagheyi/StudyScout/IMG_5154.jpeg')
        }
      />
      <ScrollView style={styles.scrollContent}>
@@ -168,9 +209,7 @@ export default function App() {
 
 
  // Conditional rendering to display the correct page
- if (currentPage === 'callFunction') {
-   return renderCallFunctionPage();
- } else if (currentPage === 'studySpaces') {
+ if (currentPage === 'studySpaces') {
    return renderStudySpacesPage();
  } else if (currentPage === 'walcDetails') {
    return renderWalcPage();
@@ -207,6 +246,9 @@ const styles = StyleSheet.create({
    overflow: 'hidden',
    marginBottom: 15,
    paddingVertical: 10,
+   flexDirection: 'row', // Align children (button and text) in a row
+   alignItems: 'center', // Center them vertically
+   justifyContent: 'space-between', // Push children to opposite ends
  },
  buildingImage: {
   width: '100%',
@@ -233,7 +275,8 @@ const styles = StyleSheet.create({
    height: 213.333,
    resizeMode: 'contain',
    borderRadius: 15,
- },backButtonContainer: {
+ },
+backButtonContainer: {
     position: 'absolute',
     bottom: 30,
     left: 20,
@@ -266,4 +309,38 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  currentLocationText: {
+    position: 'absolute',
+    bottom: 30,
+    fontSize: 14,
+    color: '#000',
+    fontFamily: 'AvenirNext-Regular',
+    textAlign: 'center',
+    width: '100%',
+    paddingHorizontal: 20,
+  },
+  distanceText: {
+    color: '#fff', // White color for contrast on the dark button background
+    fontSize: 12,
+    fontWeight: 'bold',
+    fontFamily: 'AvenirNext-Regular',
+    paddingRight: 15, // Add some padding to the right of the text
+  },
+  callFunctionButton: {
+    width: '90%',
+    borderColor: '#000',
+    borderWidth: 2,
+    borderRadius: 10,
+    paddingVertical: 15,
+    marginBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    marginTop: 20,
+  },
+  buttonText: {
+    color: '#000',
+    fontSize: 18,
+    fontWeight: 'bold',
+  }
 });
