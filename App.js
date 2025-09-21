@@ -223,6 +223,7 @@ export default function App() {
          style={styles.walcImage}
          source={require('/Users/anwikagheyi/StudyScout/IMG_5154.jpeg')}
        />
+       
        <ScrollView style={styles.scrollContent}>
          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
            <TouchableOpacity
