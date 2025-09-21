@@ -1,11 +1,8 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, Button, View, Image, TouchableOpacity, ScrollView } from 'react-native';
-
-
-// These imports are for Firebase and are now included in this single file.
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import * as Location from 'expo-location';
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
-
 
 // The Firebase configuration is now set with empty strings
 // The app will run, but the Firebase calls will not work until you
@@ -19,11 +16,9 @@ const firebaseConfig = {
  appId: ""
 };
 
-
 // Initialize Firebase only if it hasn't been initialized yet
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const functions = getFunctions(app);
-
 
 // Mock data for building occupancy and locations
 const BUILDING_DATA = [
@@ -34,11 +29,6 @@ const BUILDING_DATA = [
  { id: '5', name: 'Hicks', occupancy: 0.8, isFunctional: false, location: { latitude: 40.42472895718729, longitude: -86.91255983053797 } },
  { id: '6', name: 'WTHR', occupancy: 0.95, isFunctional: false, location: { latitude: 40.42661749484793, longitude: -86.91302332565841 } },
 ];
-
-const userLocation = {
-  latitude: 40.42837234316712, 
-  longitude: -86.92228050170229
-};
 
 const WALC_HOURS = [
   'Monday: 7:00 AM - 12:00 AM',
@@ -66,7 +56,6 @@ const WALC_HOURS = [
 const getColorForOccupancy = (occupancy) => {
  const gold = { r: 206, g: 184, b: 136 }; // #CEB888
  const black = { r: 0, g: 0, b: 0 };    // #000000
- // Linearly interpolate between black and gold based on occupancy
  const r = Math.floor(black.r + (gold.r - black.r) * occupancy);
  const g = Math.floor(black.g + (gold.g - black.g) * occupancy);
  const b = Math.floor(black.b + (gold.b - black.b) * occupancy);
@@ -93,254 +82,270 @@ const findDistance = (loc1, loc2) => {
   return R * c;
 };
 
-// Add distance to the building data and sort them by occupancy
-const buildingsWithDistance = BUILDING_DATA.map(building => ({
-  ...building,
-  distance: findDistance(userLocation, building.location),
-}));
-
-const sortedBuildings = [...buildingsWithDistance].sort((a, b) => a.occupancy - b.occupancy);
-
+// Main App Component
 export default function App() {
   const [currentPage, setCurrentPage] = useState('studySpaces');
-  const [showDistances, setShowDistances] = useState(false); // New state variable
-
-
-  const callMyFunction = () => {
-    console.log("Button pressed!");
-    const updateUserLocation = httpsCallable(functions, 'updateUserLocation');
-    // Note: This userLocation is hardcoded for now, you would get it from a GPS API
-    const userLocationToSend = { latitude: 40.4237, longitude: -86.9212 };
-    updateUserLocation(userLocationToSend)
-      .then((result) => {
-        console.log("SUCCESS: The function returned:", result.data);
-      })
-      .catch((error) => {
-        console.error("ERROR calling function:", error);
+  const [userLocation, setUserLocation] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
+  
+  // This useEffect hook handles fetching location
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setErrorMsg('Permission to access location was denied');
+        return;
+      }
+      const updateUserLocation = httpsCallable(functions, 'updateUserLocation');
+      Location.watchPositionAsync({
+        accuracy: Location.Accuracy.High,
+        timeInterval: 10000,
+        distanceInterval: 10,
+      }, (newLocation) => {
+        setUserLocation(newLocation.coords); // Store only the coords object
+        
+        // Automatically send the location to the backend
+        updateUserLocation({ 
+            latitude: newLocation.coords.latitude, 
+            longitude: newLocation.coords.longitude 
+        })
+          .then((result) => {
+            console.log("SUCCESS: The function returned:", result.data);
+          })
+          .catch((error) => {
+            console.error("ERROR calling function:", error);
+          });
       });
-      // Set the state to true to show the distances
-      setShowDistances(true);
-  };
+    })();
+  }, []);
 
+  // Memoize the calculated distances to avoid re-calculating on every render
+  const buildingsWithDistance = userLocation ?
+    BUILDING_DATA.map(building => ({
+      ...building,
+      distance: findDistance(userLocation, building.location),
+    })) : [];
 
- // This function renders the first screen (now deprecated in favor of the new button)
- const renderCallFunctionPage = () => (
-  <View style={styles.initialContainer}>
-    <Button
-      title="Call Cloud Function"
-      onPress={() => setCurrentPage('studySpaces')}
-    />
-  </View>
-);
+  const sortedBuildings = [...buildingsWithDistance].sort((a, b) => a.occupancy - b.occupancy);
 
+  const renderStudySpacesPage = () => (
+    <View style={styles.studySpacesContainer}>
+      <Text style={styles.heading}>Study Spaces</Text>
+      <View style={styles.buttonContainer}>
+        {sortedBuildings.map(building => (
+          <View
+            key={building.id}
+            style={[
+              styles.buildingButtonWrapper,
+              { backgroundColor: getColorForOccupancy(building.occupancy) }
+            ]}
+          >
+            <TouchableOpacity 
+              style={styles.fullButton}
+              onPress={() => {
+                if (building.isFunctional) {
+                  setCurrentPage('walcDetails');
+                } else {
+                  console.log(`${building.name} button clicked (not yet functional).`);
+                }
+              }}
+            >
+              <Text style={[
+                styles.buildingButtonText, 
+                { color: building.occupancy > 0.5 ? '#000' : '#fff' }
+              ]}>
+                {building.name}
+              </Text>
+            </TouchableOpacity>
 
- // This function renders the second screen with the study spaces
- const renderStudySpacesPage = () => (
-   <View style={styles.studySpacesContainer}>
-     <Text style={styles.heading}>Study Spaces</Text>
-     <View style={styles.buttonContainer}>
-       {sortedBuildings.map(building => (
-         <View
-           key={building.id}
-           style={[
-             styles.buildingButtonWrapper,
-             { backgroundColor: getColorForOccupancy(building.occupancy) }
-           ]}
-         >
-           <Button
-             title={building.name}
-             onPress={() => {
-               if (building.isFunctional) {
-                 setCurrentPage('walcDetails');
-               } else {
-                 console.log(`${building.name} button clicked (not yet functional).`);
-               }
-             }}
-             color={building.occupancy > 0.5 ? '#000' : '#fff'} // Set button text color to white for contrast
-           />
-           {/* Conditionally render the distance */}
-           {showDistances && (
-             <Text style={styles.distanceText}>
-               {building.distance.toFixed(1)} mi
-             </Text>
-           )}
-         </View>
-       ))}
-     </View>
-     {/* The new button to call the function */}
-     <TouchableOpacity
-       style={styles.callFunctionButton}
-       onPress={callMyFunction}
-     >
-       <Text style={styles.buttonText}>Call Cloud Function</Text>
-     </TouchableOpacity>
-     <Text style={styles.currentLocationText}>
-       Current Location: {userLocation.latitude}, {userLocation.longitude}
-     </Text>
-   </View>
- );
-
-
- // This function renders the new WALC details page
- const renderWalcPage = () => (
-   <View style={styles.walcContainer}>
-     <Text style={styles.walcText}>WALC</Text>
-     <Image
-       style={styles.walcImage} 
-       source={
-         require('/Users/anwikagheyi/StudyScout/IMG_5154.jpeg')
-       }
-     />
-     <ScrollView style={styles.scrollContent}>
-        {WALC_HOURS.map((time, index) => (
-          <Text key={index} style={styles.timeText}>
-            {time}
-          </Text>
+            {userLocation && (
+              <Text style={styles.distanceText}>
+                {building.distance.toFixed(1)} mi
+              </Text>
+            )}
+          </View>
         ))}
-      </ScrollView>
-     <View style={styles.backButtonContainer}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setCurrentPage('studySpaces')}>
-          <Text style={styles.backArrow}>←</Text>
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
       </View>
-   </View>
- );
+      {userLocation && (
+        <Text style={styles.currentLocationText}>
+          Current Location: {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
+        </Text>
+      )}
+      {errorMsg && (
+          <Text style={styles.errorText}>{errorMsg}</Text>
+      )}
+    </View>
+  );
 
+  const renderWalcPage = () => (
+    <View style={styles.walcContainer}>
+      <Text style={styles.walcText}>WALC</Text>
+      <Image
+        style={styles.walcImage} 
+        source={require('/Users/anwikagheyi/StudyScout/IMG_5154.jpeg')}
+      />
+      <ScrollView style={styles.scrollContent}>
+         {WALC_HOURS.map((time, index) => (
+           <Text key={index} style={styles.timeText}>
+             {time}
+           </Text>
+         ))}
+       </ScrollView>
+      <View style={styles.backButtonContainer}>
+         <TouchableOpacity style={styles.backButton} onPress={() => setCurrentPage('studySpaces')}>
+           <Text style={styles.backArrow}>←</Text>
+           <Text style={styles.backText}>Back</Text>
+         </TouchableOpacity>
+       </View>
+    </View>
+  );
 
- // Conditional rendering to display the correct page
- if (currentPage === 'studySpaces') {
-   return renderStudySpacesPage();
- } else if (currentPage === 'walcDetails') {
-   return renderWalcPage();
- }
+  if (currentPage === 'studySpaces') {
+    return renderStudySpacesPage();
+  } else if (currentPage === 'walcDetails') {
+    return renderWalcPage();
+  }
 }
 
-
 const styles = StyleSheet.create({
- initialContainer: {
-   flex: 1,
-   justifyContent: 'center',
-   alignItems: 'center',
- },
- studySpacesContainer: {
-   flex: 1,
-   paddingTop: 70, // Increased to move the content down
-   justifyContent: 'flex-start',
-   alignItems: 'center',
-   backgroundColor: '#f4e5c2',
- },
- heading: {
-   fontSize: 42,
-   fontWeight: 'bold',
-   color: '#000',
-   marginBottom: 60, // Increased to add space between heading and buttons
-   fontFamily: 'AvenirNext-Bold',
- },
- buttonContainer: {
-   width: '90%',
-   paddingHorizontal: 20,
- },
- buildingButtonWrapper: {
-   borderRadius: 10,
-   overflow: 'hidden',
-   marginBottom: 15,
-   paddingVertical: 10,
-   flexDirection: 'row', // Align children (button and text) in a row
-   alignItems: 'center', // Center them vertically
-   justifyContent: 'space-between', // Push children to opposite ends
- },
- buildingImage: {
-  width: '100%',
-  height: 150,
-  marginBottom: 10,
-  borderRadius: 5,
- },
- walcContainer: {
-   flex: 1,
-   justifyContent: 'flex-start',
-   alignItems: 'center',
-   backgroundColor: '#f4e5c2',
-   paddingTop: 70,
- },
- walcText: {
-   fontSize: 42,
-   fontWeight: 'bold',
-   color: '#000',
-   marginBottom: 30, // Increased to add space between heading and buttons
-   fontFamily: 'AvenirNext-Bold',
- },
- walcImage: {
-   width: 320,
-   height: 213.333,
-   resizeMode: 'contain',
-   borderRadius: 15,
- },
-backButtonContainer: {
-    position: 'absolute',
-    bottom: 30,
-    left: 20,
-  },
-  scrollContent: {
+  initialContainer: {
     flex: 1,
-    marginTop: 25,
-    marginBottom: 100,
-    width: 320,
-    paddingHorizontal: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  backButton: {
+  studySpacesContainer: {
+    flex: 1,
+    paddingTop: 70,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    backgroundColor: '#f4e5c2',
+  },
+  heading: {
+    fontSize: 42,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 60,
+    fontFamily: 'AvenirNext-Bold',
+  },
+  buttonContainer: {
+    width: '90%',
+    paddingHorizontal: 20,
+  },
+  buildingButtonWrapper: {
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 15,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#000',
-    paddingHorizontal: 15,
+    justifyContent: 'space-between',
+  },
+  fullButton: {
+    flex: 1,
+  },
+  buildingButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
     paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: 15,
   },
-  backArrow: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginRight: 5,
+  buildingImage: {
+   width: '100%',
+   height: 150,
+   marginBottom: 10,
+   borderRadius: 5,
   },
-  backText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  currentLocationText: {
-    position: 'absolute',
-    bottom: 30,
-    fontSize: 14,
-    color: '#000',
-    fontFamily: 'AvenirNext-Regular',
-    textAlign: 'center',
-    width: '100%',
-    paddingHorizontal: 20,
-  },
-  distanceText: {
-    color: '#fff', // White color for contrast on the dark button background
-    fontSize: 12,
-    fontWeight: 'bold',
-    fontFamily: 'AvenirNext-Regular',
-    paddingRight: 15, // Add some padding to the right of the text
-  },
-  callFunctionButton: {
-    width: '90%',
-    borderColor: '#000',
-    borderWidth: 2,
-    borderRadius: 10,
-    paddingVertical: 15,
-    marginBottom: 20,
+  walcContainer: {
+    flex: 1,
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-    marginTop: 20,
+    backgroundColor: '#f4e5c2',
+    paddingTop: 70,
   },
-  buttonText: {
-    color: '#000',
-    fontSize: 18,
+  walcText: {
+    fontSize: 42,
     fontWeight: 'bold',
-  }
+    color: '#000',
+    marginBottom: 30,
+    fontFamily: 'AvenirNext-Bold',
+  },
+  walcImage: {
+    width: 320,
+    height: 213.333,
+    resizeMode: 'contain',
+    borderRadius: 15,
+  },
+ backButtonContainer: {
+     position: 'absolute',
+     bottom: 30,
+     left: 20,
+   },
+   scrollContent: {
+     flex: 1,
+     marginTop: 25,
+     marginBottom: 100,
+     width: 320,
+     paddingHorizontal: 20,
+     backgroundColor: 'rgba(255, 255, 255, 0.5)',
+     borderRadius: 15,
+   },
+   backButton: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     backgroundColor: '#000',
+     paddingHorizontal: 15,
+     paddingVertical: 10,
+     borderRadius: 20,
+   },
+   backArrow: {
+     color: '#fff',
+     fontSize: 20,
+     fontWeight: 'bold',
+     marginRight: 5,
+   },
+   backText: {
+     color: '#fff',
+     fontSize: 18,
+     fontWeight: 'bold',
+   },
+   currentLocationText: {
+     position: 'absolute',
+     bottom: 30,
+     fontSize: 14,
+     color: '#000',
+     fontFamily: 'AvenirNext-Regular',
+     textAlign: 'center',
+     width: '100%',
+     paddingHorizontal: 20,
+   },
+   distanceText: {
+     color: '#fff',
+     fontSize: 12,
+     fontWeight: 'bold',
+     fontFamily: 'AvenirNext-Regular',
+     paddingRight: 15,
+   },
+   callFunctionButton: {
+     width: '90%',
+     borderColor: '#000',
+     borderWidth: 2,
+     borderRadius: 10,
+     paddingVertical: 15,
+     marginBottom: 20,
+     alignItems: 'center',
+     justifyContent: 'center',
+     backgroundColor: 'transparent',
+     marginTop: 20,
+   },
+   buttonText: {
+     color: '#000',
+     fontSize: 18,
+     fontWeight: 'bold',
+   },
+   errorText: {
+       color: 'red',
+       fontSize: 14,
+       textAlign: 'center',
+       marginBottom: 10,
+   }
 });
