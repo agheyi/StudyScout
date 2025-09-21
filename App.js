@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, Button, View, Image } from 'react-native';
+import { StyleSheet, Text, Button, View, Image, TouchableOpacity, ScrollView } from 'react-native';
 
 
 // These imports are for Firebase and are now included in this single file.
@@ -35,6 +35,27 @@ const BUILDING_DATA = [
  { id: '6', name: 'WTHR', occupancy: 0.95, isFunctional: false },
 ];
 
+const WALC_HOURS = [
+  'Monday: 7:00 AM - 12:00 AM',
+  'Tuesday: 7:00 AM - 12:00 AM',
+  'Wednesday: 7:00 AM - 12:00 AM',
+  'Thursday: 7:00 AM - 12:00 AM',
+  'Friday: 7:00 AM - 12:00 AM',
+  'Saturday: 8:00 AM - 12:00 AM',
+  'Sunday: 8:00 AM - 12:00 AM',
+  'Monday (Next Week): 7:00 AM - 12:00 AM',
+  'Tuesday (Next Week): 7:00 AM - 12:00 AM',
+  'Wednesday (Next Week): 7:00 AM - 12:00 AM',
+  'Thursday (Next Week): 7:00 AM - 12:00 AM',
+  'Friday (Next Week): 7:00 AM - 12:00 AM',
+  'Saturday (Next Week): 8:00 AM - 12:00 AM',
+  'Sunday (Next Week): 8:00 AM - 12:00 AM',
+  'Monday (Week 3): 7:00 AM - 12:00 AM',
+  'Tuesday (Week 3): 7:00 AM - 12:00 AM',
+  'Wednesday (Week 3): 7:00 AM - 12:00 AM',
+  'Thursday (Week 3): 7:00 AM - 12:00 AM',
+  'Friday (Week 3): 7:00 AM - 12:00 AM',
+];
 
 // Helper function to get a Purdue-themed color from black to gold
 const getColorForOccupancy = (occupancy) => {
@@ -122,17 +143,26 @@ export default function App() {
  // This function renders the new WALC details page
  const renderWalcPage = () => (
    <View style={styles.walcContainer}>
-     <Text style={styles.walcText}>Hi</Text>
+     <Text style={styles.walcText}>WALC</Text>
      <Image
-       style={styles.walcImage}
-       source={{
-         uri: 'https://placehold.co/400x300/f4e5c2/000?text=WALC+Building',
-       }}
+       style={styles.walcImage} 
+       source={
+         require('/Users/shrreyasethu/StudyScout-6/IMG_5154.jpeg')
+       }
      />
-     <Button
-       title="Back"
-       onPress={() => setCurrentPage('studySpaces')}
-     />
+     <ScrollView style={styles.scrollContent}>
+        {WALC_HOURS.map((time, index) => (
+          <Text key={index} style={styles.timeText}>
+            {time}
+          </Text>
+        ))}
+      </ScrollView>
+     <View style={styles.backButtonContainer}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setCurrentPage('studySpaces')}>
+          <Text style={styles.backArrow}>←</Text>
+          <Text style={styles.backText}>Back</Text>
+        </TouchableOpacity>
+      </View>
    </View>
  );
 
@@ -178,21 +208,62 @@ const styles = StyleSheet.create({
    marginBottom: 15,
    paddingVertical: 10,
  },
+ buildingImage: {
+  width: '100%',
+  height: 150,
+  marginBottom: 10,
+  borderRadius: 5,
+ },
  walcContainer: {
    flex: 1,
-   justifyContent: 'center',
+   justifyContent: 'flex-start',
    alignItems: 'center',
    backgroundColor: '#f4e5c2',
+   paddingTop: 70,
  },
  walcText: {
-   fontSize: 60,
+   fontSize: 42,
    fontWeight: 'bold',
    color: '#000',
+   marginBottom: 30, // Increased to add space between heading and buttons
+   fontFamily: 'AvenirNext-Bold',
  },
  walcImage: {
-   width: 300,
-   height: 200,
+   width: 320,
+   height: 213.333,
    resizeMode: 'contain',
-   borderRadius: 10,
- },
+   borderRadius: 15,
+ },backButtonContainer: {
+    position: 'absolute',
+    bottom: 30,
+    left: 20,
+  },
+  scrollContent: {
+    flex: 1,
+    marginTop: 25,
+    marginBottom: 100,
+    width: 320,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 15,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#000',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  backArrow: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginRight: 5,
+  },
+  backText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
 });
