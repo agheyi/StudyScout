@@ -20,12 +20,16 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 }
 
 // This is our main, callable function
-exports.updateUserLocation = functions.https.onCall(async (data, context) => {
+exports.updateUserLocation = functions.https.onCall(async (data) => {
   // Get the user's location from the data sent by the app
-  const {latitude, longitude} = data;
+  console.log("Function received location string:", data);
+  
+  const latitude = data.latitude;
+  const longitude = data.longitude;
 
-  if (!latitude || !longitude) {
-    throw new functions.https.HttpsError("invalid-argument", "Missing latitude or longitude.");
+
+  if (latitude === undefined || longitude === undefined) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing latitude or longitude.');
   }
 
   // Get a reference to our Firestore database

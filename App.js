@@ -16,11 +16,19 @@ export default function App() {
 
   const updateUserLocation = httpsCallable(functions, 'updateUserLocation');
 
-  // 1. Create an object with the location data
-  const userLocation = { latitude: 40.4237, longitude: -86.9212 }; // Using Purdue's coordinates for the test
+  const payload = {
+    latitude: 40.4237,
+    longitude: -86.9212
+  };
 
-  // 2. IMPORTANT: Pass the 'userLocation' object when you call the function
-  updateUserLocation(userLocation)
+
+
+
+  // 2. Log the object right before you send it to be 100% sure it's correct.
+  console.log("Sending this payload to the function:", payload.latitude, payload.longitude);
+
+  // 3. Pass the single 'payload' object to the function.
+  updateUserLocation(payload)
     .then((result) => {
       console.log("SUCCESS: The function returned:", result.data);
     })
